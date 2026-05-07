@@ -1,24 +1,31 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
-
-import { useColorScheme } from '@/hooks/use-color-scheme';
-
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+    <>
+      {/* StatusBar controla el color de los iconos de la batería/hora en el cel */}
+      <StatusBar style="light" />
+      
+      <Stack screenOptions={{ headerShown: false }}>
+        {/* Grupo de Autenticación (Login/Registro) */}
+        <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
+        
+        {/* Grupo de la Tienda (Tabs principales) */}
+        <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+        
+        {/* Pantalla de Detalle de Producto */}
+        <Stack.Screen 
+          name="(detail)/[id]" 
+          options={{ 
+            headerShown: true, 
+            title: "Detalle del Calzado",
+            headerStyle: { backgroundColor: '#1a1a1a' },
+            headerTintColor: '#fff',
+            headerBackTitle: "Atrás"
+          }} 
+        />
       </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    </>
   );
 }

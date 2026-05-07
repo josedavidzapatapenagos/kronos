@@ -1,98 +1,214 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  FlatList, 
+  Dimensions, 
+  Image, 
+  TouchableOpacity,
+  ActivityIndicator,
+  ScrollView 
+} from 'react-native';
+import { auth, db } from '../../services/firebaseConfig';
+import { doc, getDoc } from 'firebase/firestore';
+import { useRouter } from 'expo-router';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+const { width } = Dimensions.get('window');
 
-export default function HomeScreen() {
+export default function CatalogScreen() {
+  const [userName, setUserName] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  const skeletonCards = [1, 2, 3, 4, 5, 6];
+  
+  // Datos para el carrusel (Banners de promociones o lanzamientos)
+  const bannerImages = [
+    { id: '1', color: '#1a1a1a', title: 'NUEVA COLECCIÓN' },
+    { id: '2', color: '#220000', title: 'ARTISTAS' },
+    { id: '3', color: '#111', title: 'KRONNOS PARA TODOS' },
+  ];
+
+  useEffect(() => {
+    const getUserInfo = async () => {
+      const user = auth.currentUser;
+      if (user) {
+        try {
+          const docRef = doc(db, 'users', user.uid);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            setUserName(docSnap.data().name);
+          }
+        } catch (error) {
+          console.error("Error al obtener nombre:", error);
+        }
+      }
+      setLoading(false);
+    };
+    getUserInfo();
+  }, []);
+
+  // Componente del Carrusel
+  const renderHeader = () => (
+    <View>
+      <ScrollView 
+        horizontal 
+        pagingEnabled 
+        showsHorizontalScrollIndicator={false}
+        style={styles.carouselContainer}
+      >
+        {bannerImages.map((banner) => (
+          <View key={banner.id} style={[styles.bannerCard, { backgroundColor: banner.color }]}>
+            <Text style={styles.bannerText}>{banner.title}</Text>
+            {/* Aquí luego pondrás: <Image source={{uri: 'URL'}} style={styles.bannerImage} /> */}
+            <View style={styles.bannerOverlay} />
+          </View>
+        ))}
+      </ScrollView>
+
+      <Text style={styles.sectionTitle}>PRODUCTOS</Text>
+    </View>
+  );
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
+    <View style={styles.container}>
+      {/* HEADER FIJO */}
+      <View style={styles.header}>
+        <Image 
+          source={require('../../assets/images/kronoslogo.png')} 
+          style={styles.smallLogo} 
+          resizeMode="contain" 
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+        
+        <TouchableOpacity 
+          onPress={() => router.push('/(tabs)/profile')}
+          style={styles.userIcon}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.userInitial}>
+              {userName ? userName.charAt(0).toUpperCase() : 'U'}
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      {/* LISTA PRINCIPAL CON CARRUSEL COMO HEADER */}
+      <FlatList
+        ListHeaderComponent={renderHeader}
+        data={skeletonCards}
+        numColumns={2}
+        keyExtractor={(item) => item.toString()}
+        contentContainerStyle={styles.listContent}
+        renderItem={() => (
+          <View style={styles.card}>
+            <View style={styles.imagePlaceholder}>
+              <View style={styles.innerSkeleton} />
+            </View>
+            <View style={styles.textSkeleton} />
+            <View style={[styles.textSkeleton, { width: '40%' }]} />
+            <TouchableOpacity style={styles.fakeButton}>
+              <Text style={styles.buttonText}>DETALLES</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: { flex: 1, backgroundColor: '#000', paddingTop: 50 },
+  header: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
+    paddingHorizontal: 20,
+    paddingBottom: 15,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  smallLogo: { width: 100, height: 40 },
+  userIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#bb0000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#fff'
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  userInitial: { color: '#fff', fontWeight: 'bold', fontSize: 18 },
+  
+  // Estilos del Carrusel
+  carouselContainer: {
+    height: 180,
+    marginVertical: 10,
   },
+  bannerCard: {
+    width: width - 40,
+    height: 160,
+    marginHorizontal: 20,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#333'
+  },
+  bannerText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+    letterSpacing: 2,
+    zIndex: 2
+  },
+  bannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)'
+  },
+
+  sectionTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginHorizontal: 20,
+    marginTop: 10,
+    marginBottom: 15,
+    letterSpacing: 2,
+    borderLeftWidth: 3,
+    borderLeftColor: '#bb0000',
+    paddingLeft: 10
+  },
+  listContent: { paddingBottom: 20 },
+  card: {
+    flex: 1,
+    backgroundColor: '#0a0a0a',
+    margin: 8,
+    marginHorizontal: 15,
+    borderRadius: 15,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#1a1a1a',
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: 100,
+    backgroundColor: '#111',
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10
+  },
+  innerSkeleton: { width: '50%', height: '50%', backgroundColor: '#1a1a1a', borderRadius: 5 },
+  textSkeleton: { height: 8, backgroundColor: '#1a1a1a', borderRadius: 4, marginBottom: 6, width: '90%' },
+  fakeButton: {
+    marginTop: 5,
+    backgroundColor: '#bb0000',
+    paddingVertical: 6,
+    borderRadius: 5,
+    alignItems: 'center'
+  },
+  buttonText: { color: '#fff', fontSize: 10, fontWeight: 'bold' }
 });
