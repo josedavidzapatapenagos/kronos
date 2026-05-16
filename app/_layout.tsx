@@ -1,20 +1,20 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { AuthProvider } from "../context/AuthContext";
 
 export default function RootLayout() {
   return (
-    <>
-      {/* StatusBar controla el color de los iconos de la batería/hora en el cel */}
+    <AuthProvider>
       <StatusBar style="light" />
       
       <Stack screenOptions={{ headerShown: false }}>
-        {/* Grupo de Autenticación (Login/Registro) */}
+        {/* Grupo de Autenticación */}
         <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
         
-        {/* Grupo de la Tienda (Tabs principales) */}
+        {/* Grupo de la Tienda */}
         <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
         
-        {/* Pantalla de Detalle de Producto */}
+        {/* Pantalla de Detalle */}
         <Stack.Screen 
           name="(detail)/[id]" 
           options={{ 
@@ -25,7 +25,19 @@ export default function RootLayout() {
             headerBackTitle: "Atrás"
           }} 
         />
+
+        {/* Grupo de Administrador */}
+        <Stack.Screen 
+          name="admin" 
+          options={{ 
+            headerShown: true, 
+            title: "Panel de Control Admin",
+            headerStyle: { backgroundColor: '#000' },
+            headerTintColor: '#bb0000',
+            headerTitleStyle: { fontWeight: 'bold' }
+          }} 
+        />
       </Stack>
-    </>
+    </AuthProvider>
   );
 }

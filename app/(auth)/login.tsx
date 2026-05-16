@@ -20,9 +20,10 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await logIn(email, password);
+      // El AuthContext detectará el cambio automáticamente
       router.replace('/(tabs)'); 
     } catch (error: any) {
-      Alert.alert('Error de acceso', error);
+      Alert.alert('Error de acceso', 'Correo o contraseña incorrectos.');
     } finally {
       setLoading(false);
     }
@@ -30,7 +31,6 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Logo en la parte superior */}
       <Image 
         source={require('../../assets/images/kronoslogo.png')} 
         style={styles.logo}
@@ -59,11 +59,7 @@ export default function LoginScreen() {
         />
       </View>
 
-      <TouchableOpacity 
-        style={styles.button} 
-        onPress={handleLogin}
-        disabled={loading}
-      >
+      <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>ENTRAR</Text>}
       </TouchableOpacity>
 
@@ -75,60 +71,14 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-    padding: 30,
-    justifyContent: 'center',
-  },
-  logo: {
-    width: width * 0.5,
-    height: 120,
-    alignSelf: 'center',
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    letterSpacing: 2,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 30,
-    textTransform: 'uppercase',
-  },
-  inputContainer: {
-    gap: 15,
-    marginBottom: 30,
-  },
-  input: {
-    backgroundColor: '#1a1a1a',
-    padding: 18,
-    borderRadius: 8,
-    color: '#fff',
-    borderWidth: 1,
-    borderColor: '#333',
-  },
-  button: {
-    backgroundColor: '#bb0000',
-    padding: 18,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    letterSpacing: 2,
-  },
-  linkButton: {
-    marginTop: 25,
-    alignItems: 'center',
-  },
-  linkText: {
-    color: '#666',
-  }
+  container: { flex: 1, backgroundColor: '#000', padding: 30, justifyContent: 'center' },
+  logo: { width: width * 0.5, height: 120, alignSelf: 'center', marginBottom: 20 },
+  title: { fontSize: 28, fontWeight: 'bold', color: '#fff', textAlign: 'center' },
+  subtitle: { fontSize: 12, color: '#666', textAlign: 'center', marginBottom: 30, textTransform: 'uppercase' },
+  inputContainer: { gap: 15, marginBottom: 30 },
+  input: { backgroundColor: '#1a1a1a', padding: 18, borderRadius: 8, color: '#fff', borderWidth: 1, borderColor: '#333' },
+  button: { backgroundColor: '#bb0000', padding: 18, borderRadius: 8, alignItems: 'center' },
+  buttonText: { color: '#fff', fontWeight: 'bold', letterSpacing: 2 },
+  linkButton: { marginTop: 25, alignItems: 'center' },
+  linkText: { color: '#666' }
 });

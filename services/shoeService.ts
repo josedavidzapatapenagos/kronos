@@ -2,33 +2,29 @@ import { db, storage } from './firebaseConfig';
 import { collection, addDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
-export const uploadShoe = async (shoeData: any, imageUri: string) => {
+export const uploadFullShoe = async (shoeData: any, fileUri: string) => {
   try {
-    // 1. Convertir la imagen a un formato que Storage entienda (Blob)
-    const response = await fetch(imageUri);
+    // 1. Convertir la URI del archivo a un formato que Firebase entienda
+    const response = await fetch(fileUri);
     const blob = await response.blob();
-    
-    // 2. Crear referencia en Storage (ej: shoes/nombre_zapato.jpg)
-    const storageRef = ref(storage, `shoes/${Date.now()}_image.jpg`);
-    
-    // 3. Subir el archivo
-    await uploadBytes(storageRef, blob);
-    
-    // 4. Obtener la URL de descarga
-    const imageUrl = await getDownloadURL(storageRef);
 
-    // 5. Guardar todo en Firestore en la colección 'shoes'
-    const docRef = await addDoc(collection(db, 'shoes'), {
+    // 2. Subir el modelo 3D a Storage
+    const storageRef = ref(storage, `models/${shoeData.name}_${Date.now()}.glb`);
+    await uploadBytes(storageRef, blob);
+    const modelUrl = await getDownloadURL(storageRef);
+
+    // 3. Guardar toda la información en Firestore
+    const docRef = await addDoc(collection(db, "shoes"), {
       name: shoeData.name,
-      price: shoeData.price,
       brand: shoeData.brand,
-      imageUrl: imageUrl, // Aquí queda guardado el link a la foto
+      price: parseFloat(shoeData.price),
+      modelUrl: modelUrl, // El link al archivo 3D
       createdAt: new Date()
     });
 
     return docRef.id;
   } catch (error) {
-    console.error("Error subiendo zapato:", error);
+    console.error("Error al subir el producto:", error);
     throw error;
   }
 };
