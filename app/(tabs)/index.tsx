@@ -1,126 +1,155 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  FlatList, 
-  Dimensions, 
-  Image, 
-  TouchableOpacity,
-  ActivityIndicator,
-  ScrollView 
+  View, Text, StyleSheet, FlatList, Dimensions, 
+  Image, TouchableOpacity, ActivityIndicator, Animated, Alert 
 } from 'react-native';
 import { db } from '../../services/firebaseConfig';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { useAuth } from '../../context/AuthContext'; // Usamos tu nuevo contexto
+import { deleteShoe, deleteBanner } from '../../services/shoeService'; 
+import { useAuth } from '../../context/AuthContext'; 
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons'; 
 
 const { width } = Dimensions.get('window');
 
 export default function CatalogScreen() {
-  const { user, loading: authLoading } = useAuth();
+  const { user } = useAuth();
   const [shoes, setShoes] = useState<any[]>([]);
+  const [banners, setBanners] = useState<any[]>([]);
   const [fetching, setFetching] = useState(true);
+  const [activeIndex, setActiveIndex] = useState(0);
+  
   const router = useRouter();
-
-  // Banners del carrusel
-  const bannerImages = [
-    { id: '1', color: '#1a1a1a', title: 'NUEVA COLECCIÓN' },
-    { id: '2', color: '#220000', title: 'EDICIÓN LIMITADA' },
-    { id: '3', color: '#111', title: 'KRONNOS EXCLUSIVE' },
-  ];
+  const scrollX = useRef(new Animated.Value(0)).current;
+  const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
-    // Escucha en tiempo real de la colección 'shoes'
-    const q = query(collection(db, "shoes"), orderBy("createdAt", "desc"));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const shoesList = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setShoes(shoesList);
+    const qShoes = query(collection(db, "shoes"), orderBy("createdAt", "desc"));
+    const unsubShoes = onSnapshot(qShoes, (snap) => {
+      setShoes(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setFetching(false);
     });
 
-    return () => unsubscribe();
+    const qBanners = query(collection(db, "banners"), orderBy("createdAt", "desc"));
+    const unsubBanners = onSnapshot(qBanners, (snap) => {
+      setBanners(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    return () => { unsubShoes(); unsubBanners(); };
   }, []);
+
+  // Loop Automático
+  useEffect(() => {
+    if (banners.length > 1) {
+      const timer = setInterval(() => {
+        let nextIndex = (activeIndex + 1) % banners.length;
+        flatListRef.current?.scrollToIndex({ index: nextIndex, animated: true });
+        setActiveIndex(nextIndex);
+      }, 5000);
+      return () => clearInterval(timer);
+    }
+  }, [activeIndex, banners]);
 
   const renderHeader = () => (
     <View>
-      <ScrollView 
-        horizontal 
-        pagingEnabled 
+      <Animated.FlatList
+        ref={flatListRef}
+        data={banners}
+        keyExtractor={(item) => item.id}
+        horizontal
+        pagingEnabled
         showsHorizontalScrollIndicator={false}
-        style={styles.carouselContainer}
-      >
-        {bannerImages.map((banner) => (
-          <View key={banner.id} style={[styles.bannerCard, { backgroundColor: banner.color }]}>
-            <Text style={styles.bannerText}>{banner.title}</Text>
-            <View style={styles.bannerOverlay} />
-          </View>
-        ))}
-      </ScrollView>
+        onMomentumScrollEnd={(e) => {
+          setActiveIndex(Math.round(e.nativeEvent.contentOffset.x / width));
+        }}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+          { useNativeDriver: true }
+        )}
+        renderItem={({ item, index }) => {
+          const scale = scrollX.interpolate({
+            inputRange: [(index - 1) * width, index * width, (index + 1) * width],
+            outputRange: [0.9, 1, 0.9],
+            extrapolate: 'clamp',
+          });
 
+          return (
+            <View style={{ width: width, alignItems: 'center', paddingVertical: 10 }}>
+              <Animated.View style={[styles.bannerCard, { transform: [{ scale }] }]}>
+                {user?.rol === 'admin' && (
+                  <TouchableOpacity 
+                    style={styles.deleteBannerBtn} 
+                    onPress={() => Alert.alert("Borrar", "¿Quitar banner?", [
+                      { text: "No" }, { text: "Sí", onPress: () => deleteBanner(item.id, item.imageUrl) }
+                    ])}
+                  >
+                    <Ionicons name="close-circle" size={26} color="#ff0000" />
+                  </TouchableOpacity>
+                )}
+                <Image source={{ uri: item.imageUrl }} style={styles.bannerImage} />
+              </Animated.View>
+            </View>
+          );
+        }}
+      />
+      
+      {/* INDICADORES CORREGIDOS (USANDO scaleX) */}
+      <View style={styles.indicatorContainer}>
+        {banners.map((_, index) => {
+          const scaleX = scrollX.interpolate({
+            inputRange: [(index - 1) * width, index * width, (index + 1) * width],
+            outputRange: [1, 2.5, 1],
+            extrapolate: 'clamp',
+          });
+          const opacity = scrollX.interpolate({
+            inputRange: [(index - 1) * width, index * width, (index + 1) * width],
+            outputRange: [0.4, 1, 0.4],
+            extrapolate: 'clamp',
+          });
+          return (
+            <Animated.View 
+              key={index} 
+              style={[styles.indicator, { opacity, transform: [{ scaleX }] }]} 
+            />
+          );
+        })}
+      </View>
       <Text style={styles.sectionTitle}>PRODUCTOS DISPONIBLES</Text>
     </View>
   );
 
   const renderShoeItem = ({ item }: { item: any }) => (
-    <TouchableOpacity 
-      style={styles.card}
-      onPress={() => router.push({
-        pathname: "/(detail)/[id]",
-        params: { id: item.id }
-      })}
-    >
-      <View style={styles.imagePlaceholder}>
-        <Text style={styles.brandBadge}>{item.brand || 'KRONNOS'}</Text>
-        {/* Aquí podrías poner una imagen si la subes, o un icono 3D */}
-        <Text style={{color: '#333', fontSize: 10, marginTop: 10}}>MODELO 3D CARGADO</Text>
-      </View>
-      
-      <Text style={styles.shoeName} numberOfLines={1}>{item.name}</Text>
-      <Text style={styles.shoePrice}>${item.price}</Text>
-      
-      <TouchableOpacity 
-        style={styles.fakeButton}
-        onPress={() => router.push(`/(detail)/${item.id}`)}
-      >
-        <Text style={styles.buttonText}>VER EN 3D</Text>
+    <View style={styles.card}>
+      {user?.rol === 'admin' && (
+        <TouchableOpacity style={styles.deleteBadge} onPress={() => {
+            Alert.alert("Eliminar", "¿Borrar zapato?", [
+                { text: "No" }, { text: "Sí", onPress: () => deleteShoe(item.id, item.modelUrl, item.imageUrls) }
+            ])
+        }}>
+          <Ionicons name="trash" size={16} color="#fff" />
+        </TouchableOpacity>
+      )}
+      <TouchableOpacity onPress={() => router.push(`/(detail)/${item.id}`)}>
+        <View style={styles.imageContainer}>
+          <Image source={{ uri: item.imageUrls?.[0] }} style={styles.productImage} resizeMode="contain" />
+        </View>
+        <Text style={styles.shoeName} numberOfLines={1}>{item.name}</Text>
+        <Text style={styles.shoePrice}>${item.price}</Text>
       </TouchableOpacity>
-    </TouchableOpacity>
+    </View>
   );
 
   return (
     <View style={styles.container}>
-      {/* HEADER FIJO */}
       <View style={styles.header}>
-        <Image 
-          source={require('../../assets/images/kronoslogo.png')} 
-          style={styles.smallLogo} 
-          resizeMode="contain" 
-        />
-        
-        <TouchableOpacity 
-          onPress={() => router.push('/(tabs)/profile')}
-          style={styles.userIcon}
-        >
-          {authLoading ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text style={styles.userInitial}>
-              {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
-            </Text>
-          )}
+        <Image source={require('../../assets/images/kronoslogo.png')} style={styles.smallLogo} resizeMode="contain" />
+        <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.userIcon}>
+          <Text style={styles.userInitial}>{user?.name?.charAt(0).toUpperCase() || 'U'}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* LISTA DINÁMICA */}
       {fetching ? (
-        <View style={{flex: 1, justifyContent: 'center'}}>
-          <ActivityIndicator size="large" color="#bb0000" />
-        </View>
+        <ActivityIndicator size="large" color="#bb0000" style={{marginTop: 50}} />
       ) : (
         <FlatList
           ListHeaderComponent={renderHeader}
@@ -129,14 +158,6 @@ export default function CatalogScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           renderItem={renderShoeItem}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No hay productos en el catálogo.</Text>
-              {user?.rol === 'admin' && (
-                <Text style={{color: '#bb0000', marginTop: 10}}>Usa el panel de admin para subir uno.</Text>
-              )}
-            </View>
-          }
         />
       )}
     </View>
@@ -145,52 +166,22 @@ export default function CatalogScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000', paddingTop: 50 },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 15,
-  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 10 },
   smallLogo: { width: 100, height: 40 },
-  userIcon: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: '#bb0000', justifyContent: 'center',
-    alignItems: 'center', borderWidth: 1, borderColor: '#fff'
-  },
-  userInitial: { color: '#fff', fontWeight: 'bold', fontSize: 18 },
-  
-  carouselContainer: { height: 180, marginVertical: 10 },
-  bannerCard: {
-    width: width - 40, height: 160, marginHorizontal: 20,
-    borderRadius: 15, justifyContent: 'center', alignItems: 'center',
-    overflow: 'hidden', borderWidth: 1, borderColor: '#333'
-  },
-  bannerText: { color: '#fff', fontSize: 20, fontWeight: 'bold', letterSpacing: 2, zIndex: 2 },
-  bannerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)' },
-
-  sectionTitle: {
-    color: '#fff', fontSize: 18, fontWeight: 'bold', marginHorizontal: 20,
-    marginTop: 10, marginBottom: 15, letterSpacing: 2,
-    borderLeftWidth: 3, borderLeftColor: '#bb0000', paddingLeft: 10
-  },
-  listContent: { paddingBottom: 20, paddingHorizontal: 5 },
-  card: {
-    flex: 1, backgroundColor: '#0a0a0a', margin: 10,
-    borderRadius: 15, padding: 12, borderWidth: 1, borderColor: '#1a1a1a',
-    maxWidth: (width / 2) - 20
-  },
-  imagePlaceholder: {
-    width: '100%', height: 100, backgroundColor: '#111',
-    borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 10
-  },
-  brandBadge: { color: '#bb0000', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' },
-  shoeName: { color: '#fff', fontSize: 14, fontWeight: 'bold', marginBottom: 4 },
-  shoePrice: { color: '#666', fontSize: 13, marginBottom: 10 },
-  fakeButton: {
-    backgroundColor: '#bb0000', paddingVertical: 8, borderRadius: 5, alignItems: 'center'
-  },
-  buttonText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
-  emptyContainer: { alignItems: 'center', marginTop: 50 },
-  emptyText: { color: '#666' }
+  userIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#bb0000', justifyContent: 'center', alignItems: 'center' },
+  userInitial: { color: '#fff', fontWeight: 'bold' },
+  carouselContainer: { height: 180 },
+  bannerCard: { width: width - 40, height: 160, borderRadius: 15, backgroundColor: '#111', overflow: 'hidden', borderWidth: 1, borderColor: '#333' },
+  bannerImage: { width: '100%', height: '100%', resizeMode: 'cover' },
+  deleteBannerBtn: { position: 'absolute', top: 10, right: 10, zIndex: 30, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 15 },
+  indicatorContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: 10, marginBottom: 20 },
+  indicator: { height: 8, width: 8, borderRadius: 4, backgroundColor: '#bb0000', marginHorizontal: 6 },
+  sectionTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginHorizontal: 20, borderLeftWidth: 3, borderLeftColor: '#bb0000', paddingLeft: 10, marginBottom: 15 },
+  listContent: { paddingHorizontal: 5 },
+  card: { flex: 1, backgroundColor: '#0a0a0a', margin: 8, borderRadius: 15, padding: 10, borderWidth: 1, borderColor: '#1a1a1a' },
+  imageContainer: { height: 120, backgroundColor: '#111', borderRadius: 10, justifyContent: 'center', marginBottom: 10 },
+  productImage: { width: '100%', height: '100%' },
+  shoeName: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
+  shoePrice: { color: '#666', fontSize: 13 },
+  deleteBadge: { position: 'absolute', top: 5, right: 5, backgroundColor: 'rgba(255,0,0,0.8)', padding: 6, borderRadius: 15, zIndex: 10 }
 });

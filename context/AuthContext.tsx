@@ -3,10 +3,11 @@ import { auth, db } from '../services/firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
-interface UserType {
+export interface UserType {
   uid: string;
   email: string | null;
   name?: string;
+  displayName?: string | null; // Corregido
   rol?: string;
 }
 
@@ -27,28 +28,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (firebaseUser) {
         try {
           const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            // Mapeamos los datos: priorizamos la raíz, pero buscamos en cart si es necesario
-            setUser({
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              name: userData.name || userData.cart?.name || 'Usuario',
-              rol: userData.rol || 'user', // Aquí lee el "admin" que pusiste en la raíz
-            });
-          } else {
-            setUser({ uid: firebaseUser.uid, email: firebaseUser.email, rol: 'user' });
-          }
-        } catch (error) {
-          console.error("Error al obtener datos del usuario:", error);
-          setUser(null);
-        }
-      } else {
-        setUser(null);
-      }
+          const userData = userDoc.exists() ? userDoc.data() : {};
+          const name = userData.name || firebaseUser.displayName || 'Usuario';
+          
+          setUser({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            name: name,
+            displayName: name,
+            rol: userData.rol || 'user',
+          });
+        } catch (e) { setUser(null); }
+      } else { setUser(null); }
       setLoading(false);
     });
-
     return unsubscribe;
   }, []);
 
