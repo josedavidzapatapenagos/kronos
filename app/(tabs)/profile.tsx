@@ -13,7 +13,9 @@ export default function ProfileScreen() {
     try {
       await logOut();
       router.replace('/(auth)/login');
-    } catch (error) { console.error(error); }
+    } catch (error) { 
+      console.error(error); 
+    }
   };
 
   if (loading) return (
@@ -23,7 +25,7 @@ export default function ProfileScreen() {
   );
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <View style={styles.avatarContainer}>
           <Text style={styles.avatarText}>
@@ -47,20 +49,45 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         )}
 
+        {/* 🌟 NUEVO BOTÓN: MI CARRITO DE COMPRAS */}
         <TouchableOpacity 
           style={styles.menuItem} 
-          onPress={() => router.push('/(tabs)/order-summary')}
+          onPress={() => router.push('/(tabs)/cart')}
         >
           <View style={styles.menuItemContent}>
-            <Text style={styles.menuItemText}>MIS PEDIDOS</Text>
+            <View style={styles.menuItemLeft}>
+              <Ionicons name="cart" size={18} color="#bb0000" style={styles.menuIcon} />
+              <Text style={styles.menuItemText}>MI CARRITO</Text>
+            </View>
             <Ionicons name="chevron-forward" size={18} color="#333" />
           </View>
         </TouchableOpacity>
 
+        {/* BOTÓN EXISTENTE: MIS PEDIDOS */}
+        <TouchableOpacity 
+          style={styles.menuItem} 
+          onPress={() => router.push({
+            pathname: '/(tabs)/order-summary',
+            params: { orderId: '' } 
+          })}
+        >
+          <View style={styles.menuItemContent}>
+            <View style={styles.menuItemLeft}>
+              <Ionicons name="receipt" size={17} color="#bb0000" style={styles.menuIcon} />
+              <Text style={styles.menuItemText}>MIS PEDIDOS</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#333" />
+          </View>
+        </TouchableOpacity>
+
+        {/* BOTÓN EXISTENTE: CONFIGURACIÓN */}
         <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/(tabs)/settings')}>
           <View style={styles.menuItemContent}>
-            <Text style={styles.menuItemText}>CONFIGURACIÓN</Text>
-            <Ionicons name="settings-outline" size={18} color="#333" />
+            <View style={styles.menuItemLeft}>
+              <Ionicons name="settings-outline" size={18} color="#bb0000" style={styles.menuIcon} />
+              <Text style={styles.menuItemText}>CONFIGURACIÓN</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#333" />
           </View>
         </TouchableOpacity>
 
@@ -73,8 +100,8 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000', padding: 20 },
-  header: { alignItems: 'center', marginTop: 40, marginBottom: 30 },
+  container: { flex: 1, backgroundColor: '#000', paddingHorizontal: 20 },
+  header: { alignItems: 'center', marginTop: 60, marginBottom: 30 },
   avatarContainer: {
     width: 90, height: 90, borderRadius: 45, backgroundColor: '#111',
     justifyContent: 'center', alignItems: 'center', marginBottom: 15,
@@ -88,9 +115,11 @@ const styles = StyleSheet.create({
   menu: { gap: 10 },
   menuItem: { backgroundColor: '#080808', padding: 20, borderRadius: 15, borderWidth: 1, borderColor: '#111' },
   menuItemContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  menuItemLeft: { flexDirection: 'row', alignItems: 'center' },
+  menuIcon: { marginRight: 12 },
   menuItemText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
   adminButton: { backgroundColor: '#fff', padding: 18, borderRadius: 15, alignItems: 'center', marginBottom: 10 },
   adminButtonText: { color: '#000', fontWeight: 'bold' },
-  logoutButton: { marginTop: 40, alignItems: 'center' },
+  logoutButton: { marginTop: 40, alignItems: 'center', marginBottom: 30 },
   logoutText: { color: '#bb0000', fontWeight: 'bold', textDecorationLine: 'underline' }
 });

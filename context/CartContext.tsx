@@ -6,32 +6,43 @@ import {
   query, 
   where, 
   getDocs, 
-  deleteDoc, 
   doc, 
+  updateDoc,
   serverTimestamp, 
-  writeBatch 
+  writeBatch,
+  onSnapshot 
 } from 'firebase/firestore';
 import { useAuth } from './AuthContext';
 
-// Interfaz actualizada con la propiedad 'image' para evitar errores de TypeScript
-interface CartItem {
-  id: string;
+// Interfaz estricta y unificada para todo el flujo del carrito
+export interface CartItem {
+  id: string; // Representa el ID del calzado (shoeId en Firestore)
   name: string;
+  brand?: string;
   price: number;
   size: string;
   quantity: number;
-  image?: string; // Propiedad necesaria para la URL de imagen directa
-  imageUrls?: string[];
+  image: string; 
   customColor?: string | null;
+}
+
+// Estructura para los datos de entrega que vienen del formulario
+export interface ShippingDetails {
+  direccion: string;
+  ciudad: string;
+  telefono: string;
+  notas: string;
 }
 
 interface CartContextData {
   cart: CartItem[];
   total: number;
-  addToCart: (product: any, size: string) => Promise<void>;
+  addToCart: (product: Omit<CartItem, 'quantity' | 'size'>, size: string) => Promise<void>;
   removeFromCart: (productId: string, size: string) => Promise<void>;
+  updateQuantity: (productId: string, size: string, newQuantity: number) => Promise<void>;
   clearCart: () => void;
-  processCheckout: () => Promise<string | null>;
+  // 🌟 CORRECCIÓN: Ahora acepta el parámetro con los datos recolectados en app/envio.tsx
+  processCheckout: (shippingDetails: ShippingDetails) => Promise<string | null>;
 }
 
 const CartContext = createContext<CartContextData>({} as CartContextData);
@@ -41,119 +52,165 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [total, setTotal] = useState(0);
 
-  // Recalcular el total cada vez que el carrito local cambie
+  // Sincronización en tiempo real con la colección "cart" de Firestore
+  useEffect(() => {
+    if (!user?.uid) {
+      setCart([]);
+      return;
+    }
+
+    const q = query(collection(db, "cart"), where("userId", "==", user.uid));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const firestoreCartItems: CartItem[] = snapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+          id: data.shoeId || docSnap.id, // Mapeo crítico de shoeId al id de la UI
+          name: data.name || '',
+          brand: data.brand || '',
+          price: Number(data.price) || 0,
+          size: data.size || '40',
+          quantity: Number(data.quantity) || 1,
+          image: data.image || '',
+          customColor: data.customColor || null
+        };
+      });
+      
+      setCart(firestoreCartItems);
+    }, (error) => {
+      console.error("Error en el listener del carrito:", error);
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  // Recalcular subtotal automáticamente al cambiar el estado local 'cart'
   useEffect(() => {
     const newTotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
     setTotal(newTotal);
   }, [cart]);
 
-  // FUNCIÓN: Añadir al carrito (Sincroniza Local + Firestore)
-  const addToCart = async (product: any, size: string) => {
-    // 1. Actualizar estado local (UI inmediata)
-    setCart((prevCart) => {
-      const existingItem = prevCart.find(item => item.id === product.id && item.size === size);
-      
-      if (existingItem) {
-        return prevCart.map(item => 
-          (item.id === product.id && item.size === size) 
-            ? { ...item, quantity: item.quantity + 1 } 
-            : item
-        );
-      }
-      
-      // Aseguramos que el objeto local tenga la propiedad 'image' para el renderizado
-      return [...prevCart, { 
-        ...product, 
-        size, 
-        quantity: 1, 
-        image: product.imageUrls?.[0] || '' 
-      }];
-    });
+  // FUNCIÓN: Añadir o incrementar cantidad en Firestore
+  const addToCart = async (product: Omit<CartItem, 'quantity' | 'size'>, size: string) => {
+    if (!user?.uid) return;
 
-    // 2. Persistir en Firestore si hay sesión iniciada
-    if (user?.uid) {
-      try {
+    try {
+      const q = query(
+        collection(db, "cart"),
+        where("userId", "==", user.uid),
+        where("shoeId", "==", product.id),
+        where("size", "==", size)
+      );
+      const snapshot = await getDocs(q);
+
+      if (!snapshot.empty) {
+        const cartDocRef = doc(db, "cart", snapshot.docs[0].id);
+        const currentQty = snapshot.docs[0].data().quantity || 1;
+        await updateDoc(cartDocRef, { quantity: currentQty + 1 });
+      } else {
         await addDoc(collection(db, "cart"), {
           userId: user.uid,
           shoeId: product.id,
           name: product.name,
+          brand: product.brand || '',
           price: product.price,
-          image: product.imageUrls?.[0] || '', // Campo clave para la interfaz de órdenes
+          image: product.image, 
           size: size,
           customColor: product.customColor || null,
           quantity: 1,
           createdAt: serverTimestamp()
         });
-      } catch (e) {
-        console.error("Error al guardar en Firestore (Carrito):", e);
       }
+    } catch (e) {
+      console.error("Error al añadir a Firestore:", e);
     }
   };
 
-  // FUNCIÓN: Eliminar item del carrito
-  const removeFromCart = async (productId: string, size: string) => {
-    // Actualización local
-    setCart((prevCart) => prevCart.filter(item => !(item.id === productId && item.size === size)));
-    
-    // Eliminación en Firebase
-    if (user?.uid) {
-      try {
-        const q = query(
-          collection(db, "cart"), 
-          where("userId", "==", user.uid), 
-          where("shoeId", "==", productId),
-          where("size", "==", size)
-        );
-        const snapshot = await getDocs(q);
-        snapshot.forEach(async (document) => {
-          await deleteDoc(doc(db, "cart", document.id));
-        });
-      } catch (e) {
-        console.error("Error al eliminar de Firestore:", e);
+  // FUNCIÓN: Actualizar cantidad numérica (+ o -)
+  const updateQuantity = async (productId: string, size: string, newQuantity: number) => {
+    if (newQuantity < 1 || !user?.uid) return;
+
+    try {
+      const q = query(
+        collection(db, "cart"),
+        where("userId", "==", user.uid),
+        where("shoeId", "==", productId),
+        where("size", "==", size)
+      );
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        const cartDocRef = doc(db, "cart", snapshot.docs[0].id);
+        await updateDoc(cartDocRef, { quantity: newQuantity });
       }
+    } catch (e) {
+      console.error("Error al modificar cantidad:", e);
+    }
+  };
+
+  // FUNCIÓN: Remover fila completa
+  const removeFromCart = async (productId: string, size: string) => {
+    if (!user?.uid) return;
+
+    try {
+      const q = query(
+        collection(db, "cart"), 
+        where("userId", "==", user.uid), 
+        where("shoeId", "==", productId),
+        where("size", "==", size)
+      );
+      const snapshot = await getDocs(q);
+      
+      const batch = writeBatch(db);
+      snapshot.forEach((document) => {
+        batch.delete(doc(db, "cart", document.id));
+      });
+      await batch.commit();
+    } catch (e) {
+      console.error("Error al eliminar documento:", e);
     }
   };
 
   const clearCart = () => setCart([]);
 
-  // FUNCIÓN MAESTRA: Convierte el carrito en una Orden
-  const processCheckout = async () => {
+  // 🌟 FUNCIÓN CORREGIDA: Procesa la compra inyectando los datos de entrega
+  const processCheckout = async (shippingDetails: ShippingDetails) => {
     if (!user?.uid || cart.length === 0) return null;
 
     try {
-      // 1. Crear el documento en la colección 'orders'
-      // Usamos los nombres de campos que coinciden con tus índices (userId, createdAt)
+      // 1. Guardamos la orden oficial con la información de despacho completa
       const orderRef = await addDoc(collection(db, "orders"), {
         userId: user.uid,
         userName: user.name || 'Cliente Kronos',
-        items: cart, // El array de productos actual
+        items: cart, 
         total: total,
-        status: 'pending',
-        createdAt: serverTimestamp() // Importante para el orden del historial
+        status: 'en preparación',
+        shippingDetails: shippingDetails, // 👈 Aquí quedan vinculados dirección, ciudad, celular y notas
+        createdAt: serverTimestamp() 
       });
 
-      // 2. Limpiar el carrito en Firestore para este usuario (Batch Delete)
+      // 2. Traemos todos los documentos temporales del carrito de este usuario
       const q = query(collection(db, "cart"), where("userId", "==", user.uid));
       const querySnapshot = await getDocs(q);
       
+      // 3. Borramos el carrito de Firestore en un solo lote atómico (Batch)
       const batch = writeBatch(db);
       querySnapshot.forEach((doc) => {
         batch.delete(doc.ref);
       });
       await batch.commit();
 
-      // 3. Limpiar el estado local de la aplicación
+      // 4. Vaciamos el estado de la UI
       clearCart();
-
-      return orderRef.id; // Retorna el ID para confirmar el éxito
+      
+      return orderRef.id; 
     } catch (e) {
-      console.error("Error crítico en el Checkout:", e);
+      console.error("Error en proceso de checkout:", e);
       return null;
     }
   };
 
   return (
-    <CartContext.Provider value={{ cart, total, addToCart, removeFromCart, clearCart, processCheckout }}>
+    <CartContext.Provider value={{ cart, total, addToCart, removeFromCart, updateQuantity, clearCart, processCheckout }}>
       {children}
     </CartContext.Provider>
   );

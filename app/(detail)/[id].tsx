@@ -1,18 +1,18 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useMemo, Suspense } from 'react';
 import { 
   View, Text, StyleSheet, ActivityIndicator, 
   Image, TouchableOpacity, ScrollView, Dimensions, Alert 
 } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { db } from '../../services/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
-import { Canvas, useFrame } from '@react-three/fiber/native';
-import { useGLTF, OrbitControls, Stage } from '@react-three/drei/native';
+import { Canvas } from '@react-three/fiber/native';
+import { useGLTF, OrbitControls, Stage, Center } from '@react-three/drei/native';
 import { useCart } from '../../context/CartContext'; 
+import { Ionicons } from '@expo/vector-icons';
 import * as THREE from 'three';
 
 const { width } = Dimensions.get('window');
-
 const SIZES = ['38', '39', '40', '41', '42', '43'];
 
 const SHOE_COLORS = [
@@ -24,31 +24,12 @@ const SHOE_COLORS = [
   { name: 'Blanco', color: '#ffffff' },
 ];
 
-// --- MODELO 3D OPTIMIZADO (Solución definitiva WeakMap) ---
-function AnimatedModel({ url, selectedColor }: { url: string, selectedColor: string | null }) {
+function Model({ url, selectedColor }: { url: string, selectedColor: string | null }) {
   const { scene } = useGLTF(url);
-  const modelRef = useRef<THREE.Group>(null);
+  const clonedScene = useMemo(() => scene.clone(), [scene]);
 
-  // Limpieza de memoria al desmontar
   useEffect(() => {
-    return () => {
-      scene.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) {
-          const mesh = child as THREE.Mesh;
-          mesh.geometry.dispose();
-          if (Array.isArray(mesh.material)) {
-            mesh.material.forEach(m => m.dispose());
-          } else {
-            mesh.material.dispose();
-          }
-        }
-      });
-    };
-  }, [scene]);
-
-  // Aplicación de color
-  useEffect(() => {
-    scene.traverse((child) => {
+    clonedScene.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
         if (selectedColor) {
@@ -56,18 +37,15 @@ function AnimatedModel({ url, selectedColor }: { url: string, selectedColor: str
         }
       }
     });
-  }, [scene, selectedColor]);
+  }, [clonedScene, selectedColor]);
 
-  useFrame((state, delta) => {
-    if (modelRef.current) modelRef.current.rotation.y += delta * 0.4;
-  });
-
-  return <primitive key={url} ref={modelRef} object={scene} scale={1.6} />;
+  return <primitive object={clonedScene} />;
 }
 
 export default function DetailScreen() {
   const { id } = useLocalSearchParams();
   const { addToCart } = useCart();
+  const router = useRouter();
   
   const [shoe, setShoe] = useState<any>(null);
   const [view3D, setView3D] = useState(false);
@@ -93,14 +71,19 @@ export default function DetailScreen() {
 
   const handleAddToCart = () => {
     if (!shoe) return;
-    
-    // Pasamos el objeto del zapato con el color y talla seleccionados
-    addToCart({ 
-      ...shoe, 
-      customColor: currentColor 
-    }, selectedSize);
-    
-    Alert.alert("Añadido", `${shoe.name} (Talla ${selectedSize}) se agregó al carrito.`);
+
+    // Estructura normalizada de datos limpiando arrays complejos
+    const productToCart = {
+      id: shoe.id,
+      name: shoe.name,
+      brand: shoe.brand || '',
+      price: shoe.price,
+      image: shoe.imageUrls && shoe.imageUrls.length > 0 ? shoe.imageUrls[0] : '',
+      customColor: currentColor,
+    };
+
+    addToCart(productToCart, selectedSize);
+    Alert.alert("Añadido", `${shoe.name} se agregó al carrito.`);
   };
 
   if (loading) return (
@@ -111,39 +94,37 @@ export default function DetailScreen() {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      
-      {/* VISOR 3D ESTABLE */}
       <View style={styles.viewerContainer}>
         {view3D ? (
-          <Canvas camera={{ position: [0, 0, 5], fov: 45 }} shadows={false}>
-            <ambientLight intensity={1.5} />
-            <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={1} />
-            <pointLight position={[-10, -10, -10]} intensity={0.5} />
-            
-            <Stage 
-              intensity={0.4} 
-              environment="city" 
-              adjustCamera={1.2} 
-              shadows={false} 
-            >
-              {shoe?.modelUrl && (
-                <AnimatedModel url={shoe.modelUrl} selectedColor={currentColor} />
-              )}
-            </Stage>
-            <OrbitControls enablePan={false} makeDefault />
-          </Canvas>
+          <>
+            <Canvas camera={{ position: [0, 0, 5], fov: 45 }}>
+              <ambientLight intensity={0.8} />
+              <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} />
+              <Suspense fallback={null}>
+                <Stage preset="rembrandt" intensity={1} environment="city" adjustCamera={1.8} shadows={false}>
+                  {shoe?.modelUrl && (
+                    <Center top precise> 
+                      <Model url={shoe.modelUrl} selectedColor={currentColor} />
+                    </Center>
+                  )}
+                </Stage>
+              </Suspense>
+              <OrbitControls makeDefault enablePan={false} enableZoom={false} autoRotate={true} autoRotateSpeed={3} minPolarAngle={Math.PI / 2.5} maxPolarAngle={Math.PI / 2} />
+            </Canvas>
+            <View style={styles.loadingOverlay} pointerEvents="none">
+               <ActivityIndicator color="#bb0000" size="small" />
+            </View>
+          </>
         ) : (
-          <Image 
-            source={{ uri: shoe?.imageUrls?.[0] }} 
-            style={styles.mainImage} 
-            resizeMode="contain" 
-          />
+          <Image source={{ uri: shoe?.imageUrls?.[0] }} style={styles.mainImage} resizeMode="contain" />
         )}
 
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={22} color="#fff" />
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.toggleBtn} onPress={() => setView3D(!view3D)}>
-          <Text style={styles.toggleText}>
-            {view3D ? "VER FOTO" : "PERSONALIZAR 3D"}
-          </Text>
+          <Text style={styles.toggleText}>{view3D ? "VER FOTO" : "PERSONALIZAR 3D"}</Text>
         </TouchableOpacity>
       </View>
 
@@ -158,14 +139,10 @@ export default function DetailScreen() {
               {SHOE_COLORS.map((item, index) => (
                 <TouchableOpacity
                   key={index}
-                  style={[
-                    styles.colorCircle, 
-                    { backgroundColor: item.color || '#333' },
-                    currentColor === item.color && styles.activeColorCircle
-                  ]}
+                  style={[styles.colorCircle, { backgroundColor: item.color || '#222' }, currentColor === item.color && styles.activeColorCircle]}
                   onPress={() => setCurrentColor(item.color)}
                 >
-                  {!item.color && <Text style={{fontSize: 8, color: '#fff'}}>Orig</Text>}
+                  {!item.color && <Text style={{fontSize: 8, color: '#fff', fontWeight: 'bold'}}>ORIG</Text>}
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -176,11 +153,7 @@ export default function DetailScreen() {
           <Text style={styles.sectionTitle}>Talla (US):</Text>
           <View style={styles.sizeGrid}>
             {SIZES.map((size) => (
-              <TouchableOpacity 
-                key={size} 
-                style={[styles.sizeCard, selectedSize === size && styles.activeSizeCard]}
-                onPress={() => setSelectedSize(size)}
-              >
+              <TouchableOpacity key={size} style={[styles.sizeCard, selectedSize === size && styles.activeSizeCard]} onPress={() => setSelectedSize(size)}>
                 <Text style={[styles.sizeText, selectedSize === size && styles.activeSizeText]}>{size}</Text>
               </TouchableOpacity>
             ))}
@@ -192,7 +165,7 @@ export default function DetailScreen() {
           <Text style={styles.price}>${shoe?.price?.toLocaleString()}</Text>
         </View>
 
-        <TouchableOpacity style={styles.buyBtn} onPress={handleAddToCart}>
+        <TouchableOpacity style={styles.buyBtn} onPress={handleAddToCart} activeOpacity={0.8}>
           <Text style={styles.buyBtnText}>AÑADIR AL CARRITO</Text>
         </TouchableOpacity>
       </View>
@@ -203,69 +176,27 @@ export default function DetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   loader: { flex: 1, backgroundColor: '#000', justifyContent: 'center' },
-  viewerContainer: { height: width, backgroundColor: '#0a0a0a', overflow: 'hidden' },
+  viewerContainer: { height: width, backgroundColor: '#0a0a0a', overflow: 'hidden', position: 'relative' },
   mainImage: { width: '100%', height: '100%' },
-  toggleBtn: { 
-    position: 'absolute', 
-    bottom: 20, 
-    right: 20, 
-    backgroundColor: '#bb0000', 
-    paddingHorizontal: 20, 
-    paddingVertical: 10, 
-    borderRadius: 25,
-    elevation: 5
-  },
+  loadingOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', zIndex: -1 },
+  backBtn: { position: 'absolute', top: 50, left: 20, backgroundColor: 'rgba(0,0,0,0.6)', padding: 12, borderRadius: 14, zIndex: 50 },
+  toggleBtn: { position: 'absolute', bottom: 20, right: 20, backgroundColor: '#bb0000', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 25, zIndex: 50 },
   toggleText: { color: '#fff', fontWeight: 'bold', fontSize: 11, letterSpacing: 1 },
-  infoSection: { 
-    padding: 25, 
-    backgroundColor: '#000', 
-    borderTopLeftRadius: 30, 
-    borderTopRightRadius: 30, 
-    marginTop: -25 
-  },
+  infoSection: { padding: 25, backgroundColor: '#000', borderTopLeftRadius: 30, borderTopRightRadius: 30, marginTop: -25, borderTopWidth: 1, borderColor: '#0a0a0a' },
   brand: { color: '#bb0000', fontWeight: 'bold', letterSpacing: 2, fontSize: 12 },
   name: { color: '#fff', fontSize: 32, fontWeight: 'bold', marginVertical: 5 },
-  optionsContainer: { marginVertical: 15 },
-  sectionTitle: { color: '#555', fontSize: 13, marginBottom: 12, fontWeight: 'bold' },
-  colorCircle: { 
-    width: 42, 
-    height: 42, 
-    borderRadius: 21, 
-    marginRight: 15, 
-    borderWidth: 2, 
-    borderColor: '#222', 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  activeColorCircle: { borderColor: '#fff', transform: [{ scale: 1.1 }] },
+  optionsContainer: { marginVertical: 12 },
+  sectionTitle: { color: '#555', fontSize: 12, marginBottom: 12, fontWeight: 'bold' },
+  colorCircle: { width: 44, height: 44, borderRadius: 22, marginRight: 15, borderWidth: 2, borderColor: '#1c1c1c', justifyContent: 'center', alignItems: 'center' },
+  activeColorCircle: { borderColor: '#fff', transform: [{ scale: 1.08 }] },
   sizeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  sizeCard: { 
-    width: 55, 
-    height: 45, 
-    borderRadius: 10, 
-    backgroundColor: '#111', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    borderWidth: 1, 
-    borderColor: '#222' 
-  },
+  sizeCard: { width: 58, height: 46, borderRadius: 12, backgroundColor: '#0a0a0a', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#1a1a1a' },
   activeSizeCard: { backgroundColor: '#bb0000', borderColor: '#bb0000' },
-  sizeText: { color: '#fff', fontWeight: 'bold' },
+  sizeText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
   activeSizeText: { color: '#fff' },
-  priceContainer: { marginVertical: 25 },
-  priceLabel: { color: '#555', fontSize: 14 },
-  price: { color: '#fff', fontSize: 34, fontWeight: 'bold' },
-  buyBtn: { 
-    backgroundColor: '#fff', 
-    padding: 20, 
-    borderRadius: 15, 
-    alignItems: 'center', 
-    marginBottom: 40,
-    shadowColor: "#fff",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 8
-  },
-  buyBtnText: { color: '#000', fontWeight: 'bold', fontSize: 16, letterSpacing: 1 }
+  priceContainer: { marginVertical: 20 },
+  priceLabel: { color: '#555', fontSize: 13, fontWeight: 'bold' },
+  price: { color: '#fff', fontSize: 34, fontWeight: 'bold', marginTop: 2 },
+  buyBtn: { backgroundColor: '#fff', padding: 20, borderRadius: 14, alignItems: 'center', marginBottom: 40 },
+  buyBtnText: { color: '#000', fontWeight: 'bold', fontSize: 15 }
 });

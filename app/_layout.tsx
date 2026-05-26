@@ -30,10 +30,23 @@ export default function RootLayout() {
               headerTintColor: '#bb0000',
               headerTitleStyle: { 
                 fontWeight: 'bold',
-                // Se eliminó letterSpacing porque no es compatible aquí
               },
               headerBackTitle: "Atrás",
               animation: 'slide_from_right'
+            }} 
+          />
+          
+          {/* Pantalla de Datos de Envío (Geolocalización) */}
+          <Stack.Screen 
+            name="envio" 
+            options={{ 
+              headerShown: true, 
+              title: "DATOS DE ENTREGA",
+              headerStyle: { backgroundColor: '#000' },
+              headerTintColor: '#bb0000',
+              headerTitleStyle: { fontWeight: 'bold' },
+              headerBackTitle: "Atrás",
+              animation: 'slide_from_bottom' // Transición limpia desde abajo tipo formulario
             }} 
           />
           
