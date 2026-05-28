@@ -18,6 +18,7 @@ export default function OrderSummaryScreen() {
     const fetchOrder = async () => {
       setLoading(true);
       try {
+        // 1. Si venimos directamente redireccionados por registrar la orden con un ID específico
         if (orderId) {
           const docRef = doc(db, "orders", orderId as string);
           const docSnap = await getDoc(docRef);
@@ -28,6 +29,7 @@ export default function OrderSummaryScreen() {
           }
         }
 
+        // 2. Fallback: Si entra de forma directa desde los tabs, busca la última orden del usuario
         if (!user?.uid) {
           setLoading(false);
           return;
@@ -46,6 +48,7 @@ export default function OrderSummaryScreen() {
             };
           });
 
+          // Ordenar por fecha descendente (más recientes primero)
           fetchedOrders.sort((a: any, b: any) => b.createdAtDate - a.createdAtDate);
 
           const validOrder = fetchedOrders.find((order: any) => order.items && Array.isArray(order.items));
@@ -74,16 +77,17 @@ export default function OrderSummaryScreen() {
       <Ionicons name="receipt-outline" size={80} color="#1a1a1a" />
       <Text style={styles.noOrderText}>NO TIENES PEDIDOS RECIENTES</Text>
       <Text style={styles.subNoOrder}>Tus compras aparecerán aquí una vez confirmadas.</Text>
-      <TouchableOpacity style={styles.backCatalogBtn} onPress={() => router.replace('/(tabs)/home')}>
+      <TouchableOpacity style={styles.backCatalogBtn} onPress={() => router.replace('/(tabs)/index')}>
         <Text style={styles.backCatalogText}>VOLVER A LA TIENDA</Text>
       </TouchableOpacity>
     </View>
   );
 
-  // 🧮 Cálculos dinámicos del desglose de precios cargados de la orden
-  const subtotalProductos = lastOrder.items?.reduce((acc: number, item: any) => acc + (item.price * item.quantity), 0) || 0;
+  // 🧮 Cálculos dinámicos del desglose de precios cargados directamente desde la base de datos
+  const subtotalProductos = lastOrder.subtotal !== undefined 
+    ? lastOrder.subtotal 
+    : (lastOrder.items?.reduce((acc: number, item: any) => acc + (item.price * item.quantity), 0) || 0);
   
-  // Si tu checkout guardó 'totalPagado', usamos ese. Si no, usamos el 'total' base.
   const totalPagadoReal = lastOrder.totalPagado !== undefined ? lastOrder.totalPagado : (lastOrder.total || subtotalProductos);
   const montoDescontado = subtotalProductos - totalPagadoReal;
 
@@ -94,7 +98,7 @@ export default function OrderSummaryScreen() {
           <Text style={styles.title}>RESUMEN DE PEDIDO</Text>
           <Text style={styles.orderId}>ORDEN: #{lastOrder.id.toUpperCase()}</Text>
         </View>
-        <TouchableOpacity style={styles.closeBtn} onPress={() => router.replace('/(tabs)/home')} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.closeBtn} onPress={() => router.replace('/(tabs)/index')} activeOpacity={0.7}>
           <Ionicons name="close-outline" size={28} color="#fff" />
         </TouchableOpacity>
       </View>
@@ -131,7 +135,7 @@ export default function OrderSummaryScreen() {
           <View style={styles.footer}>
             <View style={styles.divider} />
             
-            {/* 🏷️ Desglose Completo con Descuento */}
+            {/* 🏷️ Desglose Completo Sincronizado */}
             <View style={styles.priceRow}>
               <Text style={styles.priceLabel}>Subtotal</Text>
               <Text style={styles.priceValue}>${subtotalProductos.toLocaleString()}</Text>
@@ -186,12 +190,9 @@ const styles = StyleSheet.create({
   itemPrice: { color: '#fff', fontWeight: 'bold', marginTop: 5, fontSize: 15 },
   footer: { marginTop: 10, marginBottom: 40 },
   divider: { height: 1, backgroundColor: '#1a1a1a', marginVertical: 20 },
-  
-  // Estilos añadidos para el desglose de precios previos al total
   priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   priceLabel: { color: '#666', fontSize: 14 },
   priceValue: { color: '#aaa', fontSize: 15, fontWeight: '500' },
-
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 15, borderTopWidth: 1, borderColor: '#1a1a1a', paddingTop: 15 },
   totalLabel: { color: '#fff', fontWeight: 'bold', fontSize: 13, letterSpacing: 0.5 },
   totalValue: { color: '#fff', fontSize: 26, fontWeight: 'bold' },

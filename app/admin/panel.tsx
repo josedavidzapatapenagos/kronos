@@ -28,6 +28,13 @@ export default function AdminPanel() {
   // --- ESTADOS PARA BANNERS ---
   const [bannerLoading, setBannerLoading] = useState(false);
 
+  // --- 🏷️ NUEVOS ESTADOS PARA CREACIÓN DE CUPONES ---
+  const [cuponForm, setCuponForm] = useState({
+    codigo: '',
+    descuento: '',
+  });
+  const [cuponLoading, setCuponLoading] = useState(false);
+
   // Seleccionar modelo 3D
   const handlePickDocument = async () => {
     try {
@@ -103,6 +110,51 @@ export default function AdminPanel() {
       Alert.alert("Error", "No se pudo subir el banner.");
     } finally {
       setBannerLoading(false);
+    }
+  };
+
+  // --- 🚀 NUEVA LÓGICA: CREAR CUPÓN EN LA API LOCAL ---
+  const handleCreateCupon = async () => {
+    const { codigo, descuento } = cuponForm;
+
+    if (!codigo.trim() || !descuento.trim()) {
+      Alert.alert("Campos Vacíos", "Por favor ingresa el código y el porcentaje de descuento.");
+      return;
+    }
+
+    const porcentajeNum = parseInt(descuento);
+    if (isNaN(porcentajeNum) || porcentajeNum <= 0 || porcentajeNum > 100) {
+      Alert.alert("Descuento Inválido", "El descuento debe ser un número entero entre 1 y 100.");
+      return;
+    }
+
+    setCuponLoading(true);
+    try {
+      // Usamos tu IP local fija de desarrollo (192.168.1.99) en el puerto 3000
+      const response = await fetch('http://192.168.1.99:3000/api/cupones/crear', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          codigo: codigo.trim().toUpperCase(),
+          descuento: porcentajeNum,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        Alert.alert("¡Éxito!", `Cupón ${codigo.toUpperCase()} (${porcentajeNum}%) creado correctamente.`);
+        setCuponForm({ codigo: '', descuento: '' }); // Limpiar formulario
+      } else {
+        Alert.alert("Error de API", data.mensaje || "No se pudo guardar el cupón.");
+      }
+    } catch (error) {
+      console.error("Error al crear el cupón:", error);
+      Alert.alert("Error de Red", "No se pudo establecer conexión con kronos-api.");
+    } finally {
+      setCuponLoading(false);
     }
   };
 
@@ -188,6 +240,44 @@ export default function AdminPanel() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* SEPARADOR VISUAL */}
+      <View style={styles.separator} />
+
+      {/* 🏷️ NUEVA SECCIÓN: GESTIÓN DE DESCUENTOS (CUPONES) */}
+      <Text style={styles.title}>CUPONES DE DESCUENTO</Text>
+      <View style={styles.cuponBox}>
+        <TextInput
+          style={styles.input}
+          placeholder="Código del Cupón (Ej: PROMO20)"
+          placeholderTextColor="#666"
+          autoCapitalize="characters"
+          value={cuponForm.codigo}
+          onChangeText={(val) => setCuponForm({ ...cuponForm, codigo: val })}
+        />
+
+        <TextInput
+          style={[styles.input, { marginTop: 12 }]}
+          placeholder="Porcentaje Descuento (Ej: 15)"
+          placeholderTextColor="#666"
+          keyboardType="numeric"
+          maxLength={3}
+          value={cuponForm.descuento}
+          onChangeText={(val) => setCuponForm({ ...cuponForm, descuento: val })}
+        />
+
+        <TouchableOpacity 
+          style={[styles.cuponSubmitBtn, cuponLoading && { opacity: 0.7 }]} 
+          onPress={handleCreateCupon}
+          disabled={cuponLoading}
+        >
+          {cuponLoading ? (
+            <ActivityIndicator color="#000" />
+          ) : (
+            <Text style={styles.cuponSubmitBtnText}>CREAR CUPÓN ACTIVO</Text>
+          )}
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
@@ -205,10 +295,14 @@ const styles = StyleSheet.create({
   publishBtn: { backgroundColor: '#bb0000', padding: 20, borderRadius: 10, alignItems: 'center', marginTop: 10 },
   publishBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   
-  // Estilos nuevos para la sección de Banner
   separator: { height: 1, backgroundColor: '#222', marginVertical: 30 },
   bannerBox: { backgroundColor: '#111', padding: 20, borderRadius: 12, borderWidth: 1, borderColor: '#222' },
   bannerSubtitle: { color: '#888', fontSize: 13, marginBottom: 20 },
   bannerBtn: { backgroundColor: '#333', padding: 15, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#444' },
-  bannerBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 13 }
+  bannerBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+
+  // Estilos agregados para la sección de cupones
+  cuponBox: { backgroundColor: '#111', padding: 20, borderRadius: 12, borderWidth: 1, borderColor: '#222' },
+  cuponSubmitBtn: { backgroundColor: '#fff', padding: 18, borderRadius: 10, alignItems: 'center', marginTop: 15 },
+  cuponSubmitBtnText: { color: '#000', fontWeight: 'bold', fontSize: 14, letterSpacing: 0.5 }
 });
