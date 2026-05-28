@@ -1,237 +1,272 @@
-// 📂 Archivo: app/envio.tsx
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
-import { useCart } from '../context/CartContext';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
+import { 
+  StyleSheet, 
+  Text, 
+  View, 
+  TextInput, 
+  TouchableOpacity, 
+  ScrollView, 
+  Alert, 
+  ActivityIndicator 
+} from 'react-native';
 
 export default function EnvioScreen() {
-  const { total, processCheckout } = useCart();
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-
-  // Estados locales para capturar los datos de la entrega
+  // 📍 Estados del Formulario de Envío
   const [direccion, setDireccion] = useState('');
   const [ciudad, setCiudad] = useState('');
   const [telefono, setTelefono] = useState('');
-  const [notas, setNotas] = useState('');
 
-  const handleConfirmarPedido = async () => {
-    if (!direccion.trim() || !ciudad.trim() || !telefono.trim()) {
-      Alert.alert("Datos incompletos", "Por favor llena los campos obligatorios para el despacho.");
+  // 🏷️ Estados para el Control del Cupón y la API
+  const [cupónTexto, setCupónTexto] = useState('');
+  const [descuentoAplicado, setDescuentoAplicado] = useState(0); // Guarda el porcentaje (ej: 20)
+  const [cargandoCupón, setCargandoCupón] = useState(false);
+
+  // 💰 Simulación del valor inicial del carrito (hardcoded para pruebas)
+  const total = 150000; 
+
+  // 🧮 Cálculos automáticos basados en el estado del descuento
+  const valorDescontado = (total * descuentoAplicado) / 100;
+  const totalFinal = total - valorDescontado;
+
+  // 🌐 Función para validar el cupón con la API local (kronos-api)
+  const manejarAplicarCupon = async () => {
+    if (!cupónTexto.trim()) {
+      Alert.alert('Atención', 'Por favor ingresa un código de cupón.');
       return;
     }
 
+    setCargandoCupón(true);
     try {
-      setLoading(true);
+      // Reemplaza con tu IP local si estás probando en un dispositivo físico
+      const respuesta = await fetch(`http://localhost:3000/api/cupones/${cupónTexto.trim().toUpperCase()}`);
+      const data = await respuesta.json();
 
-      const datosEnvio = {
-        direccion: direccion.trim(),
-        ciudad: ciudad.trim(),
-        telefono: telefono.trim(),
-        notas: notas.trim()
-      };
-
-      const newOrderId = await processCheckout(datosEnvio);
-
-      if (newOrderId) {
-        router.replace({
-          pathname: '/(tabs)/order-summary',
-          params: { orderId: newOrderId }
-        });
+      if (respuesta.ok && data.valido) {
+        setDescuentoAplicado(data.porcentaje);
+        Alert.alert('¡Éxito!', `Cupón aplicado. Obtienes un ${data.porcentaje}% de descuento.`);
       } else {
-        Alert.alert("Error", "No se pudo procesar tu orden. Inténtalo de nuevo.");
+        setDescuentoAplicado(0);
+        Alert.alert('Cupón Inválido', data.mensaje || 'El cupón ingresado no existe o expiró.');
       }
     } catch (error) {
-      console.error(error);
-      Alert.alert("Error crítico", "Ocurrió un problema de conexión.");
+      console.error('Error validando cupón:', error);
+      Alert.alert('Error de Conexión', 'No se pudo conectar con el servidor de Kronos.');
     } finally {
-      setLoading(false);
+      setCargandoCupón(false);
     }
   };
 
+  // 🛒 Procesar el envío final
+  const manejarFormularioEnvio = () => {
+    if (!direccion || !ciudad || !telefono) {
+      Alert.alert('Campos incompletos', 'Por favor llena todos los datos de envío.');
+      return;
+    }
+    
+    Alert.alert(
+      'Pedido Confirmado', 
+      `Tu pedido por un total de $${totalFinal.toLocaleString()} será enviado a ${ciudad}.`
+    );
+  };
+
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-      style={{ flex: 1, backgroundColor: '#000' }}
-    >
-      <View style={styles.container}>
-        {/* Cabecera fijo */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.title}>DATOS DE ENVÍO</Text>
-        </View>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+      <Text style={styles.title}>Datos de Envío</Text>
 
-        {/* 🌟 Contenedor del Buscador de Google (Debe estar arriba del ScrollView para que flote) */}
-        <View style={styles.autocompleteContainer}>
-          <Text style={styles.sectionLabel}>BUSCAR DIRECCIÓN DE ENTREGA *</Text>
-          <GooglePlacesAutocomplete
-            placeholder="Escribe tu dirección (Ej: Calle 10...)"
-            fetchDetails={true}
-            onPress={(data, details = null) => {
-              // Seteamos la dirección completa seleccionada
-              setDireccion(data.description);
-              
-              // Extraemos la ciudad de los componentes de dirección de Google
-              if (details) {
-                const cityComponent = details.address_components.find(component =>
-                  component.types.includes('locality')
-                );
-                if (cityComponent) {
-                  setCiudad(cityComponent.long_name);
-                }
-              }
-            }}
-            query={{
-              key: 'AIzaSyANmXoxSoLsFUi_PIM0548ihUW2-bsECUY', // 🔑 Tu API Key inyectada
-              language: 'es',
-              components: 'country:co', // Filtra para que solo busque en Colombia 🇨🇴
-            }}
-            styles={{
-              textInput: styles.input,
-              listView: styles.googleListView,
-              row: styles.googleRow,
-              description: styles.googleDescription,
-              predefinedPlacesDescription: { color: '#666' },
-            }}
-            nearbyPlacesAPI="GooglePlacesSearch"
-            debounce={400}
-          />
-        </View>
+      {/* Formulario */}
+      <View style={styles.form}>
+        <Text style={styles.label}>Dirección de entrega</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Ej: Calle 45 #12-34"
+          placeholderTextColor="#666"
+          value={direccion}
+          onChangeText={setDireccion}
+        />
 
-        {/* ScrollView para el resto de campos secundarios del formulario */}
-        <ScrollView 
-          showsVerticalScrollIndicator={false} 
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          <Text style={styles.sectionLabel}>DIRECCIÓN DE ENTREGA CONFIRMADA</Text>
-          <TextInput
-            style={[styles.input, styles.disabledInput]}
-            placeholder="Se completará automáticamente al buscar arriba"
-            placeholderTextColor="#444"
-            value={direccion}
-            onChangeText={setDireccion}
-            editable={true} // Permite retocarla manualmente si falta el número de apto/casa
-          />
+        <Text style={styles.label}>Ciudad</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Ej: Medellín"
+          placeholderTextColor="#666"
+          value={ciudad}
+          onChangeText={setCiudad}
+        />
 
-          <Text style={styles.sectionLabel}>CIUDAD / MUNICIPIO *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Ej. Medellín"
-            placeholderTextColor="#444"
-            value={ciudad}
-            onChangeText={setCiudad}
-          />
-
-          <Text style={styles.sectionLabel}>TELÉFONO DE CONTACTO *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Número de celular"
-            placeholderTextColor="#444"
-            keyboardType="phone-pad"
-            value={telefono}
-            onChangeText={setTelefono}
-          />
-
-          <Text style={styles.sectionLabel}>INDICACIONES ADICIONALES (OPCIONAL)</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            placeholder="Ej: Dejar en portería, color de la fachada..."
-            placeholderTextColor="#444"
-            multiline
-            numberOfLines={3}
-            value={notas}
-            onChangeText={setNotas}
-          />
-
-          {/* Resumen del cobro final */}
-          <View style={styles.summaryBox}>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Total a pagar:</Text>
-              <Text style={styles.summaryValue}>${total.toLocaleString()}</Text>
-            </View>
-            <Text style={styles.paymentMethod}>Método: Pago contra entrega / Confirmación manual</Text>
-          </View>
-        </ScrollView>
-
-        {/* Botón estático final de Compra */}
-        <View style={styles.footer}>
-          <TouchableOpacity 
-            style={styles.confirmBtn} 
-            onPress={handleConfirmarPedido}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#000" size="small" />
-            ) : (
-              <Text style={styles.confirmBtnText}>CONFIRMAR Y COLOCAR PEDIDO</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.label}>Teléfono de contacto</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Ej: 3001234567"
+          placeholderTextColor="#666"
+          keyboardType="phone-pad"
+          value={telefono}
+          onChangeText={setTelefono}
+        />
       </View>
-    </KeyboardAvoidingView>
+
+      {/* Módulo de Cupones */}
+      <Text style={styles.label}>¿Tienes un cupón de descuento?</Text>
+      <View style={styles.couponContainer}>
+        <TextInput
+          style={styles.couponInput}
+          placeholder="Código del cupón (ej: ALIANZA20)"
+          placeholderTextColor="#666"
+          autoCapitalize="characters"
+          value={cupónTexto}
+          onChangeText={setCupónTexto}
+          editable={!cargandoCupón}
+        />
+        <TouchableOpacity 
+          style={styles.couponButton} 
+          onPress={manejarAplicarCupon}
+          disabled={cargandoCupón}
+        >
+          {cargandoCupón ? (
+            <ActivityIndicator color="#000" size="small" />
+          ) : (
+            <Text style={styles.couponButtonText}>Aplicar</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Resumen del cobro final recalculado dinámicamente */}
+      <View style={styles.summaryBox}>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Subtotal:</Text>
+          <Text style={styles.summarySubValue}>${total.toLocaleString()}</Text>
+        </View>
+        
+        {/* Renderizado condicional del descuento */}
+        {descuentoAplicado > 0 && (
+          <View style={[styles.summaryRow, { marginTop: 8 }]}>
+            <Text style={[styles.summaryLabel, { color: '#00FF66' }]}>Descuento ({descuentoAplicado}%):</Text>
+            <Text style={[styles.summarySubValue, { color: '#00FF66' }]}>-${valorDescontado.toLocaleString()}</Text>
+          </View>
+        )}
+
+        <View style={[styles.summaryRow, { marginTop: 12, borderTopWidth: 1, borderColor: '#222', paddingTop: 12 }]}>
+          <Text style={styles.summaryLabelFinal}>Total a pagar:</Text>
+          <Text style={styles.summaryValue}>${totalFinal.toLocaleString()}</Text>
+        </View>
+        <Text style={styles.paymentMethod}>Método: Pago contra entrega / Confirmación manual</Text>
+      </View>
+
+      {/* Botón de Acción Principal */}
+      <TouchableOpacity style={styles.submitButton} onPress={manejarFormularioEnvio}>
+        <Text style={styles.submitButtonText}>Finalizar Pedido</Text>
+      </TouchableOpacity>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000', paddingTop: 50 },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, marginBottom: 15 },
-  backBtn: { marginRight: 15, padding: 5 },
-  title: { color: '#fff', fontSize: 22, fontWeight: 'bold', letterSpacing: 0.5 },
-  
-  // Contenedor especial con zIndex alto para que el dropDown de Google maps flote encima de todo
-  autocompleteContainer: {
-    paddingHorizontal: 20,
-    zIndex: 5,
-    backgroundColor: '#000',
-    marginBottom: 10
+  container: {
+    flex: 1,
+    backgroundColor: '#0A0A0A',
+    padding: 20,
   },
-  
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 40, zIndex: 1 },
-  sectionLabel: { color: '#666', fontSize: 11, fontWeight: 'bold', marginBottom: 8, marginTop: 15, letterSpacing: 0.5 },
-  
-  input: { 
-    backgroundColor: '#0a0a0a', 
-    borderColor: '#1a1a1a', 
-    borderWidth: 1, 
-    borderRadius: 12, 
-    padding: 15, 
-    color: '#fff', 
-    fontSize: 14 
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFF',
+    marginBottom: 20,
+    marginTop: 10,
   },
-  disabledInput: { borderColor: '#222', color: '#ccc' },
-  textArea: { height: 80, textAlignVertical: 'top' },
-  
-  // Estilos específicos premium para el menú de sugerencias de Google
-  googleListView: {
-    backgroundColor: '#0a0a0a',
-    borderRadius: 12,
-    marginTop: 5,
+  form: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    color: '#AAA',
+    marginBottom: 8,
+    marginTop: 10,
+  },
+  input: {
+    backgroundColor: '#121212',
     borderWidth: 1,
-    borderColor: '#1a1a1a',
-    maxHeight: 200,
+    borderColor: '#222',
+    borderRadius: 8,
+    padding: 12,
+    color: '#FFF',
+    fontSize: 16,
+    marginBottom: 12,
   },
-  googleRow: {
-    backgroundColor: '#0a0a0a',
-    padding: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#161616',
+  couponContainer: {
+    flexDirection: 'row',
+    marginBottom: 25,
   },
-  googleDescription: {
-    color: '#fff',
-    fontSize: 13,
+  couponInput: {
+    flex: 1,
+    backgroundColor: '#121212',
+    borderWidth: 1,
+    borderColor: '#222',
+    borderTopLeftRadius: 8,
+    borderBottomLeftRadius: 8,
+    padding: 12,
+    color: '#FFF',
+    fontSize: 16,
   },
-
-  summaryBox: { backgroundColor: '#0a0a0a', borderRadius: 15, padding: 20, marginTop: 30, borderWidth: 1, borderColor: '#1a1a1a' },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  summaryLabel: { color: '#666', fontWeight: 'bold', fontSize: 13 },
-  summaryValue: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
-  paymentMethod: { color: '#bb0000', fontSize: 11, fontWeight: 'bold', marginTop: 10, textAlign: 'center' },
-  footer: { padding: 20, backgroundColor: '#000' },
-  confirmBtn: { backgroundColor: '#fff', padding: 18, borderRadius: 12, alignItems: 'center' },
-  confirmBtnText: { color: '#000', fontWeight: 'bold', fontSize: 14, letterSpacing: 0.5 }
+  couponButton: {
+    backgroundColor: '#FFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    borderTopRightRadius: 8,
+    borderBottomRightRadius: 8,
+  },
+  couponButtonText: {
+    color: '#000',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  summaryBox: {
+    backgroundColor: '#121212',
+    borderWidth: 1,
+    borderColor: '#222',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 25,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  summaryLabel: {
+    color: '#888',
+    fontSize: 14,
+  },
+  summarySubValue: {
+    color: '#AAA',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  summaryLabelFinal: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  summaryValue: {
+    color: '#FFF',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  paymentMethod: {
+    color: '#666',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 12,
+    fontStyle: 'italic',
+  },
+  submitButton: {
+    backgroundColor: '#00FF66',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  submitButtonText: {
+    color: '#000',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
 });

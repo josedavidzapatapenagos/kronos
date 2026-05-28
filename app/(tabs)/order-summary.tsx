@@ -33,7 +33,6 @@ export default function OrderSummaryScreen() {
           return;
         }
 
-        // Sin orderBy en el servidor para evitar problemas de índices compuestos
         const q = query(collection(db, "orders"), where("userId", "==", user.uid));
         const querySnapshot = await getDocs(q);
         
@@ -47,7 +46,6 @@ export default function OrderSummaryScreen() {
             };
           });
 
-          // Ordenación del lado del cliente
           fetchedOrders.sort((a: any, b: any) => b.createdAtDate - a.createdAtDate);
 
           const validOrder = fetchedOrders.find((order: any) => order.items && Array.isArray(order.items));
@@ -81,6 +79,13 @@ export default function OrderSummaryScreen() {
       </TouchableOpacity>
     </View>
   );
+
+  // 🧮 Cálculos dinámicos del desglose de precios cargados de la orden
+  const subtotalProductos = lastOrder.items?.reduce((acc: number, item: any) => acc + (item.price * item.quantity), 0) || 0;
+  
+  // Si tu checkout guardó 'totalPagado', usamos ese. Si no, usamos el 'total' base.
+  const totalPagadoReal = lastOrder.totalPagado !== undefined ? lastOrder.totalPagado : (lastOrder.total || subtotalProductos);
+  const montoDescontado = subtotalProductos - totalPagadoReal;
 
   return (
     <View style={styles.container}>
@@ -125,12 +130,29 @@ export default function OrderSummaryScreen() {
         ListFooterComponent={
           <View style={styles.footer}>
             <View style={styles.divider} />
+            
+            {/* 🏷️ Desglose Completo con Descuento */}
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Subtotal</Text>
+              <Text style={styles.priceValue}>${subtotalProductos.toLocaleString()}</Text>
+            </View>
+
+            {montoDescontado > 0 && (
+              <View style={[styles.priceRow, { marginTop: 8 }]}>
+                <Text style={[styles.priceLabel, { color: '#00FF66' }]}>
+                  Descuento {lastOrder.cuponAplicado ? `(${lastOrder.cuponAplicado})` : ''}
+                </Text>
+                <Text style={[styles.priceValue, { color: '#00FF66' }]}>
+                  -${montoDescontado.toLocaleString()}
+                </Text>
+              </View>
+            )}
+
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>TOTAL PAGADO</Text>
-              <Text style={styles.totalValue}>
-                ${lastOrder.total ? lastOrder.total.toLocaleString() : '0'}
-              </Text>
+              <Text style={styles.totalValue}>${totalPagadoReal.toLocaleString()}</Text>
             </View>
+
             <View style={styles.statusBox}>
               <Ionicons name="cube-outline" size={22} color="#fff" />
               <View style={{ flex: 1 }}>
@@ -164,8 +186,14 @@ const styles = StyleSheet.create({
   itemPrice: { color: '#fff', fontWeight: 'bold', marginTop: 5, fontSize: 15 },
   footer: { marginTop: 10, marginBottom: 40 },
   divider: { height: 1, backgroundColor: '#1a1a1a', marginVertical: 20 },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  totalLabel: { color: '#666', fontWeight: 'bold', fontSize: 12 },
+  
+  // Estilos añadidos para el desglose de precios previos al total
+  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  priceLabel: { color: '#666', fontSize: 14 },
+  priceValue: { color: '#aaa', fontSize: 15, fontWeight: '500' },
+
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 15, borderTopWidth: 1, borderColor: '#1a1a1a', paddingTop: 15 },
+  totalLabel: { color: '#fff', fontWeight: 'bold', fontSize: 13, letterSpacing: 0.5 },
   totalValue: { color: '#fff', fontSize: 26, fontWeight: 'bold' },
   statusBox: { flexDirection: 'row', backgroundColor: '#bb0000', padding: 18, borderRadius: 16, marginTop: 30, alignItems: 'center', gap: 15 },
   statusText: { color: '#fff', fontWeight: 'bold', fontSize: 13, letterSpacing: 0.5 },
